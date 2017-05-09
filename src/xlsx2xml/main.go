@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/tealeg/xlsx"
 )
@@ -33,13 +34,24 @@ const (
 )
 
 func main() {
+	defer func(timeBegin int64) {
+		log("done. cost %d seconds", time.Now().Unix()-timeBegin)
+	}(time.Now().Unix())
+
 	// parse config
+	log("loading config\n")
 	flag.Parse()
 	pathIn, pathOut, fmtEnable, fmtOut := loadConfig()
-	fmt.Println(fmtEnable, fmtOut)
+	log("path xlsx:%s\n", pathIn)
+	log("path xml:%s\n", pathOut)
+	if fmtEnable {
+		log("path fmt:%s\n", fmtOut)
+	}
 
 	// processing
 	for _, pathSrc := range getFilelist(pathIn) {
+		log("parsing file %s\n", pathSrc)
+
 		// Args to store tmp data
 		vKey, vDesc, vData, vType := []string{}, []string{}, []string{}, []string{}
 
@@ -58,7 +70,16 @@ func main() {
 		}
 	}
 
+	//	bufio.NewReader(os.Stdin).ReadLine()
 	return
+}
+
+func log(format string, args ...interface{}) {
+	if len(args) == 0 {
+		fmt.Printf(format)
+	} else {
+		fmt.Printf(format, args)
+	}
 }
 
 func loadConfig() (string, string, bool, string) {
@@ -184,7 +205,7 @@ func writeXml(pathTar string, keyV, descV, dataV []string) {
 		createPath(dirname)
 	}
 
-	// write data
+	// write file
 	file, err := os.OpenFile(pathTar, os.O_CREATE|os.O_RDWR, 0664)
 	if err != nil {
 		panic(err)
@@ -195,9 +216,13 @@ func writeXml(pathTar string, keyV, descV, dataV []string) {
 	}
 	writer := bufio.NewWriter(file)
 	defer writer.Flush()
+
+	// write head
 	if _, err := writer.WriteString("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"); err != nil {
 		panic(err)
 	}
+
+	// write comment
 	if _, err := writer.WriteString("<!-- "); err != nil {
 		panic(err)
 	}
@@ -212,6 +237,8 @@ func writeXml(pathTar string, keyV, descV, dataV []string) {
 	if _, err := writer.WriteString("-->\n"); err != nil {
 		panic(err)
 	}
+
+	// write data
 	if _, err := writer.WriteString("<root>\n"); err != nil {
 		panic(err)
 	}
