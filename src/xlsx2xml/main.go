@@ -304,7 +304,7 @@ func writeFormat(pathTar string, keyV, descV, typeV []string) {
 	defer writer.Flush()
 
 	for i := 0; i < length; i++ {
-		if _, err := writer.WriteString(fmt.Sprintf("\t%s\t%s\t`xml:\"%s,attr\"`\t//%s\n", keyV[i], typeV[i], keyV[i], descV[i])); err != nil {
+		if _, err := writer.WriteString(fmt.Sprintf("\t%s\t%s\t`xml:\"%s,attr\"`\t//%s\n", strings.ToUpper(keyV[i][0:1])+keyV[i][1:], typeV[i], keyV[i], descV[i])); err != nil {
 			panic(err)
 		}
 	}
