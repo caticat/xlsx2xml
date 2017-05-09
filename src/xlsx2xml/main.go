@@ -49,6 +49,11 @@ func main() {
 		log("path fmt:%s\n", fmtOut)
 	}
 
+	// int fmtOut
+	if fmtEnable {
+		initFormat(fmtOut)
+	}
+
 	// processing
 	for _, pathSrc := range getFilelist(pathIn) {
 		if !strings.HasSuffix(pathSrc, ".xlsx") {
@@ -69,8 +74,8 @@ func main() {
 			writeXml(pathTar, vKey, vDesc, vData)
 
 			if fmtEnable {
-				pathTar = strings.TrimSuffix(fmtOut+getRelativeDir(pathIn, pathSrc), ".xlsx") + ".txt"
-				writeFormat(pathTar, vKey, vDesc, vType)
+				pathTar = "." + strings.TrimSuffix(getRelativeDir(pathIn, pathSrc), ".xlsx") + ".xml"
+				writeFormat(fmtOut, pathTar, vKey, vDesc, vType)
 			}
 		}
 	}
@@ -90,7 +95,7 @@ func log(format string, args ...interface{}) {
 func loadConfig() (string, string, bool, string) {
 	cfg := *conf.LoadConfig(config)
 	format_file_enable, _ := strconv.ParseBool(cfg.Read("format_file", "enable"))
-	return fixPath(cfg.Read("path", "in")), fixPath(cfg.Read("path", "out")), format_file_enable, fixPath(cfg.Read("format_file", "out"))
+	return fixPath(cfg.Read("path", "in")), fixPath(cfg.Read("path", "out")), format_file_enable, fixPath(cfg.Read("format_file", "outFile"))
 }
 
 func fixPath(path string) string {
@@ -270,13 +275,25 @@ func writeXml(pathTar string, keyV, descV, dataV []string) {
 	}
 }
 
-func writeFormat(pathTar string, keyV, descV, typeV []string) {
+func initFormat(pathTar string) {
 	// check output floder
 	dirname := getDirname(pathTar)
 	if !isPathExist(dirname) {
 		createPath(dirname)
 	}
 
+	// create/reset file
+	file, err := os.OpenFile(pathTar, os.O_CREATE|os.O_RDWR, 0664)
+	if err != nil {
+		panic(err)
+	}
+	defer file.Close()
+	if err := file.Truncate(0); err != nil {
+		panic(err)
+	}
+}
+
+func writeFormat(pathTar, fileName string, keyV, descV, typeV []string) {
 	// get arr length
 	length := func(args ...int) int {
 		if len(args) == 0 {
@@ -292,20 +309,23 @@ func writeFormat(pathTar string, keyV, descV, typeV []string) {
 	}(len(keyV), len(descV), len(typeV))
 
 	// write data
-	file, err := os.OpenFile(pathTar, os.O_CREATE|os.O_RDWR, 0664)
+	file, err := os.OpenFile(pathTar, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0664)
 	if err != nil {
 		panic(err)
 	}
 	defer file.Close()
-	if err := file.Truncate(0); err != nil {
-		panic(err)
-	}
 	writer := bufio.NewWriter(file)
 	defer writer.Flush()
 
+	if _, err := writer.WriteString(fileName + "\n"); err != nil {
+		panic(err)
+	}
 	for i := 0; i < length; i++ {
 		if _, err := writer.WriteString(fmt.Sprintf("\t%s\t%s\t`xml:\"%s,attr\"`\t//%s\n", strings.ToUpper(keyV[i][0:1])+keyV[i][1:], typeV[i], keyV[i], descV[i])); err != nil {
 			panic(err)
 		}
+	}
+	if _, err := writer.WriteString("\n"); err != nil {
+		panic(err)
 	}
 }
