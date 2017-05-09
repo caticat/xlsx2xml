@@ -41,15 +41,20 @@ func main() {
 	// processing
 	for _, pathSrc := range getFilelist(pathIn) {
 		// Args to store tmp data
-		vKey, vDesc, vData := []string{}, []string{}, []string{}
+		vKey, vDesc, vData, vType := []string{}, []string{}, []string{}, []string{}
 
 		// Analyze data from xlsx
-		analyzeXlsx(pathSrc, &vKey, &vDesc, &vData)
+		analyzeXlsx(pathSrc, &vKey, &vDesc, &vData, &vType)
 
 		// Write data to xml
 		if len(vKey) > 0 {
 			pathTar := strings.TrimSuffix(pathOut+getRelativeDir(pathIn, pathSrc), ".xlsx") + ".xml"
 			writeXml(pathTar, vKey, vDesc, vData)
+
+			if fmtEnable {
+				pathTar = strings.TrimSuffix(fmtOut+getRelativeDir(pathIn, pathSrc), ".xlsx") + ".txt"
+				writeFormat(pathTar, vKey, vDesc, vType)
+			}
 		}
 	}
 
@@ -102,7 +107,7 @@ func createPath(path string) {
 	}
 }
 
-func analyzeXlsx(pathSrc string, keyV, descV, dataV *[]string) {
+func analyzeXlsx(pathSrc string, keyV, descV, dataV, typeV *[]string) {
 	// open file
 	xlFile, err := xlsx.OpenFile(pathSrc)
 	if err != nil {
@@ -130,6 +135,13 @@ func analyzeXlsx(pathSrc string, keyV, descV, dataV *[]string) {
 			switch x {
 			case XTitle:
 			case XType:
+				for y, cell := range row.Cells {
+					if _, ok := mValid[y]; !ok {
+						continue
+					}
+					text, _ := cell.String()
+					*typeV = append(*typeV, text)
+				}
 			case XDesc:
 				for y, cell := range row.Cells {
 					if _, ok := mValid[y]; !ok {
@@ -214,6 +226,42 @@ func writeXml(pathTar string, keyV, descV, dataV []string) {
 	}
 }
 
-func writeFormat() {
+func writeFormat(pathTar string, keyV, descV, typeV []string) {
+	// check output floder
+	dirname := getDirname(pathTar)
+	if !isPathExist(dirname) {
+		createPath(dirname)
+	}
 
+	// get arr length
+	length := func(args ...int) int {
+		if len(args) == 0 {
+			panic("invalid args")
+		}
+		arg := args[0]
+		for _, v := range args {
+			if v < arg {
+				arg = v
+			}
+		}
+		return arg
+	}(len(keyV), len(descV), len(typeV))
+
+	// write data
+	file, err := os.OpenFile(pathTar, os.O_CREATE|os.O_RDWR, 0664)
+	if err != nil {
+		panic(err)
+	}
+	defer file.Close()
+	if err := file.Truncate(0); err != nil {
+		panic(err)
+	}
+	writer := bufio.NewWriter(file)
+	defer writer.Flush()
+
+	for i := 0; i < length; i++ {
+		if _, err := writer.WriteString(fmt.Sprintf("\t%s\t%s\t`xml:\"%s,attr\"`\t//%s\n", keyV[i], typeV[i], keyV[i], descV[i])); err != nil {
+			panic(err)
+		}
+	}
 }
