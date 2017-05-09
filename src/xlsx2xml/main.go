@@ -86,7 +86,11 @@ func log(format string, args ...interface{}) {
 func loadConfig() (string, string, bool, string) {
 	cfg := *conf.LoadConfig(config)
 	format_file_enable, _ := strconv.ParseBool(cfg.Read("format_file", "enable"))
-	return cfg.Read("path", "in"), cfg.Read("path", "out"), format_file_enable, cfg.Read("format_file", "out")
+	return fixPath(cfg.Read("path", "in")), fixPath(cfg.Read("path", "out")), format_file_enable, fixPath(cfg.Read("format_file", "out"))
+}
+
+func fixPath(path string) string {
+	return strings.Replace(path, "\\", "/", -1)
 }
 
 // get all files in the path
