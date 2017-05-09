@@ -152,6 +152,7 @@ func analyzeXlsx(pathSrc string, keyV, descV, dataV, typeV *[]string) {
 				mValid[y] = true
 			}
 		}
+		break
 	}
 
 	// organizing data
@@ -200,6 +201,7 @@ func analyzeXlsx(pathSrc string, keyV, descV, dataV, typeV *[]string) {
 				*dataV = append(*dataV, dataS+" />\n")
 			}
 		}
+		break
 	}
 }
 
