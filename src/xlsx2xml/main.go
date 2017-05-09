@@ -35,7 +35,8 @@ const (
 
 func main() {
 	defer func(timeBegin int64) {
-		log("done. cost %d seconds", time.Now().Unix()-timeBegin)
+		log("done. cost %d seconds\n", time.Now().Unix()-timeBegin)
+		time.Sleep(time.Second * 3)
 	}(time.Now().Unix())
 
 	// parse config
