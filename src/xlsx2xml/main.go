@@ -51,6 +51,10 @@ func main() {
 
 	// processing
 	for _, pathSrc := range getFilelist(pathIn) {
+		if !strings.HasSuffix(pathSrc, ".xlsx") {
+			continue
+		}
+
 		log("parsing file %s\n", pathSrc)
 
 		// Args to store tmp data
