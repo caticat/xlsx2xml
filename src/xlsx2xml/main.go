@@ -188,6 +188,7 @@ func analyzeXlsx(pathSrc string, keyV, descV, dataV, typeV *[]string) {
 					*keyV = append(*keyV, text)
 				}
 			default:
+				dataValid := false
 				dataS := "\t<data"
 				for y, cell := range row.Cells {
 					if _, ok := mValid[y]; !ok {
@@ -197,8 +198,13 @@ func analyzeXlsx(pathSrc string, keyV, descV, dataV, typeV *[]string) {
 					}
 					text, _ := cell.String()
 					dataS = fmt.Sprintf("%s %s=\"%s\"", dataS, (keyAllV)[y], text) // If slice can trans to array
+					if len(text) > 0 {
+						dataValid = true
+					}
 				}
-				*dataV = append(*dataV, dataS+" />\n")
+				if dataValid {
+					*dataV = append(*dataV, dataS+" />\n")
+				}
 			}
 		}
 		break
