@@ -23,6 +23,11 @@ var (
 	Export_Usage = map[string]bool{"Both": true, "Server": true}
 )
 
+// type conversion
+var (
+	Type_Conversion = map[string]string{"int": "int64" /*, "string": "string"*/}
+)
+
 // rows of xlsx
 const (
 	XTitle = iota // 标题
@@ -140,6 +145,13 @@ func createPath(path string) {
 	if err := os.MkdirAll(path, os.ModePerm); err != nil {
 		panic(err)
 	}
+}
+
+func convertType(from string) string {
+	if to, ok := Type_Conversion[from]; ok {
+		return to
+	}
+	return from
 }
 
 func analyzeXlsx(pathSrc string, keyV, descV, dataV, typeV *[]string) {
@@ -321,7 +333,7 @@ func writeFormat(pathTar, fileName string, keyV, descV, typeV []string) {
 		panic(err)
 	}
 	for i := 0; i < length; i++ {
-		if _, err := writer.WriteString(fmt.Sprintf("\t%s\t%s\t`xml:\"%s,attr\"`\t//%s\n", strings.ToUpper(keyV[i][0:1])+keyV[i][1:], typeV[i], keyV[i], descV[i])); err != nil {
+		if _, err := writer.WriteString(fmt.Sprintf("\t%s\t%s\t`xml:\"%s,attr\"`\t//%s\n", strings.ToUpper(keyV[i][0:1])+keyV[i][1:], convertType(typeV[i]), keyV[i], descV[i])); err != nil {
 			panic(err)
 		}
 	}
