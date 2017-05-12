@@ -33,6 +33,7 @@ var (
 var (
 	Value_Conversion = map[string]func(string) bool{
 		"int": func(val string) bool {
+			return true // pass to check int val
 			_, err := strconv.ParseInt(val, 10, 64)
 			return err == nil
 		}}
@@ -251,9 +252,28 @@ func analyzeXlsx(pathSrc string, keyV, descV, dataV, typeV *[]string) error {
 					*keyV = append(*keyV, text)
 				}
 			default:
+				// confirm row is not empty
 				dataValid := false
-				dataS := "\t<data"
 				for y, cell := range row.Cells {
+					if _, ok := mValid[y]; !ok {
+						continue
+					}
+					text, _ := cell.String()
+					if len(text) > 0 {
+						dataValid = true
+						break
+					}
+				}
+				if !dataValid {
+					continue
+				}
+
+				// join data
+				dataValid = false
+				dataS := "\t<data"
+				y := 0
+				var cell *xlsx.Cell
+				for y, cell = range row.Cells {
 					if _, ok := mValid[y]; !ok {
 						continue
 					} else if y >= len(keyAllV) {
@@ -272,6 +292,9 @@ func analyzeXlsx(pathSrc string, keyV, descV, dataV, typeV *[]string) error {
 					}
 				}
 				if dataValid {
+					for i := y + 1; i < len(keyAllV); i++ { // to fix diff rows has diff cells
+						dataS = fmt.Sprintf("%s %s=\"\"", dataS, (keyAllV)[i])
+					}
 					*dataV = append(*dataV, dataS+" />\n")
 				}
 			}
@@ -282,6 +305,9 @@ func analyzeXlsx(pathSrc string, keyV, descV, dataV, typeV *[]string) error {
 	// check duplicate keys
 	mKeyCount := make(map[string]int)
 	for _, v := range keyAllV {
+		if len(v) == 0 {
+			continue
+		}
 		mKeyCount[v]++
 	}
 	sDupKeys := ""
