@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"conf"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -15,7 +16,7 @@ import (
 )
 
 var (
-	config = flag.String("config", "config.ini", "General configuraion file.")
+	config = flag.String("config", "xlsx2xml.ini", "General configuraion file.")
 )
 
 // every valuable columns
@@ -26,6 +27,15 @@ var (
 // type conversion
 var (
 	Type_Conversion = map[string]string{"int": "int64" /*, "string": "string"*/}
+)
+
+// value conversion
+var (
+	Value_Conversion = map[string]func(string) bool{
+		"int": func(val string) bool {
+			_, err := strconv.ParseInt(val, 10, 64)
+			return err == nil
+		}}
 )
 
 // rows of xlsx
@@ -39,9 +49,17 @@ const (
 )
 
 func main() {
+	var err error
+	var validFileCount int
 	defer func(timeBegin int64) {
-		log("done. cost %d seconds\n", time.Now().Unix()-timeBegin)
-		time.Sleep(time.Second * 3)
+		if err == nil {
+			log("%d files converted.\ncost %d seconds.\ndone.\n", validFileCount, time.Now().Unix()-timeBegin)
+			time.Sleep(time.Second * 3)
+		} else {
+			fmt.Println("Error:" + err.Error())
+			fmt.Println("Press enter to quit.")
+			bufio.NewReader(os.Stdin).ReadLine()
+		}
 	}(time.Now().Unix())
 
 	// parse config
@@ -60,23 +78,35 @@ func main() {
 	}
 
 	// processing
-	for _, pathSrc := range getFilelist(pathIn) {
+	for _, pathSrc := range getFilelist(pathIn, &err) {
+		if err != nil {
+			return
+		}
 		if !strings.HasSuffix(pathSrc, ".xlsx") {
+			continue
+		} else if strings.HasPrefix(getBaseName(pathSrc), "~$") {
 			continue
 		}
 
-		log("parsing file %s\n", pathSrc)
+		validFileCount++
+		log("parsing file [%d][%s]\n", validFileCount, pathSrc)
 
 		// Args to store tmp data
 		vKey, vDesc, vData, vType := []string{}, []string{}, []string{}, []string{}
 
 		// Analyze data from xlsx
-		analyzeXlsx(pathSrc, &vKey, &vDesc, &vData, &vType)
+		err = analyzeXlsx(pathSrc, &vKey, &vDesc, &vData, &vType)
+		if err != nil {
+			return
+		}
 
 		// Write data to xml
 		if len(vKey) > 0 {
 			pathTar := strings.TrimSuffix(pathOut+getRelativeDir(pathIn, pathSrc), ".xlsx") + ".xml"
-			writeXml(pathTar, vKey, vDesc, vData)
+			err = writeXml(pathTar, vKey, vDesc, vData, vType)
+			if err != nil {
+				return
+			}
 
 			if fmtEnable {
 				pathTar = "." + strings.TrimSuffix(getRelativeDir(pathIn, pathSrc), ".xlsx") + ".xml"
@@ -93,7 +123,7 @@ func log(format string, args ...interface{}) {
 	if len(args) == 0 {
 		fmt.Printf(format)
 	} else {
-		fmt.Printf(format, args)
+		fmt.Printf(format, args...)
 	}
 }
 
@@ -108,11 +138,12 @@ func fixPath(path string) string {
 }
 
 // get all files in the path
-func getFilelist(path string) []string {
+func getFilelist(path string, e *error) []string {
 	fileV := []string{}
 	filepath.Walk(path, func(path string, f os.FileInfo, err error) error {
 		if f == nil {
-			panic(err)
+			*e = err
+			return nil
 		}
 		if f.IsDir() {
 			return nil
@@ -126,6 +157,15 @@ func getFilelist(path string) []string {
 func getRelativeDir(base, full string) string {
 	full = strings.Replace(full, "\\", "/", -1)
 	return full[strings.Index(full, base)+len(base):]
+}
+
+func getBaseName(path string) string {
+	path = strings.Replace(path, "\\", "/", -1)
+	if pos := strings.LastIndex(path, "/"); pos == -1 {
+		return path
+	} else {
+		return path[pos+1:]
+	}
 }
 
 func getDirname(path string) string {
@@ -154,18 +194,18 @@ func convertType(from string) string {
 	return from
 }
 
-func analyzeXlsx(pathSrc string, keyV, descV, dataV, typeV *[]string) {
+func analyzeXlsx(pathSrc string, keyV, descV, dataV, typeV *[]string) error {
 	// open file
 	xlFile, err := xlsx.OpenFile(pathSrc)
 	if err != nil {
-		panic(err)
+		return err
 	}
 
 	// get valid columns
 	mValid := make(map[int]bool)
 	for _, sheet := range xlFile.Sheets {
 		if len(sheet.Rows) < XData {
-			return
+			return errors.New("No data in " + pathSrc)
 		}
 		for y, cell := range sheet.Rows[XUsage].Cells {
 			text, _ := cell.String()
@@ -177,6 +217,7 @@ func analyzeXlsx(pathSrc string, keyV, descV, dataV, typeV *[]string) {
 	}
 
 	// organizing data
+	typeAllV := []string{}
 	keyAllV := []string{}
 	for _, sheet := range xlFile.Sheets {
 		for x, row := range sheet.Rows {
@@ -184,10 +225,11 @@ func analyzeXlsx(pathSrc string, keyV, descV, dataV, typeV *[]string) {
 			case XTitle:
 			case XType:
 				for y, cell := range row.Cells {
+					text, _ := cell.String()
+					typeAllV = append(typeAllV, text)
 					if _, ok := mValid[y]; !ok {
 						continue
 					}
-					text, _ := cell.String()
 					*typeV = append(*typeV, text)
 				}
 			case XDesc:
@@ -218,6 +260,12 @@ func analyzeXlsx(pathSrc string, keyV, descV, dataV, typeV *[]string) {
 						break
 					}
 					text, _ := cell.String()
+
+					if fun, ok := Value_Conversion[typeAllV[y]]; ok {
+						if !fun(text) {
+							return errors.New(fmt.Sprintf("Invalid data [column:%s;row:%d;type:%s;data:%s]", (keyAllV)[y], x+1, typeAllV[y], text))
+						}
+					}
 					dataS = fmt.Sprintf("%s %s=\"%s\"", dataS, (keyAllV)[y], text) // If slice can trans to array
 					if len(text) > 0 {
 						dataValid = true
@@ -230,9 +278,26 @@ func analyzeXlsx(pathSrc string, keyV, descV, dataV, typeV *[]string) {
 		}
 		break
 	}
+
+	// check duplicate keys
+	mKeyCount := make(map[string]int)
+	for _, v := range keyAllV {
+		mKeyCount[v]++
+	}
+	sDupKeys := ""
+	for k, v := range mKeyCount {
+		if v > 1 {
+			sDupKeys += fmt.Sprintf("\t%s:%d;\n", k, v)
+		}
+	}
+	if len(sDupKeys) > 0 {
+		return errors.New("Duplicate key found:\n" + sDupKeys)
+	} else {
+		return nil
+	}
 }
 
-func writeXml(pathTar string, keyV, descV, dataV []string) {
+func writeXml(pathTar string, keyV, descV, dataV, typeV []string) error {
 	// check output floder
 	dirname := getDirname(pathTar)
 	if !isPathExist(dirname) {
@@ -242,49 +307,50 @@ func writeXml(pathTar string, keyV, descV, dataV []string) {
 	// write file
 	file, err := os.OpenFile(pathTar, os.O_CREATE|os.O_RDWR, 0664)
 	if err != nil {
-		panic(err)
+		return err
 	}
 	defer file.Close()
 	if err := file.Truncate(0); err != nil {
-		panic(err)
+		return err
 	}
 	writer := bufio.NewWriter(file)
 	defer writer.Flush()
 
 	// write head
 	if _, err := writer.WriteString("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"); err != nil {
-		panic(err)
+		return err
 	}
 
 	// write comment
 	if _, err := writer.WriteString("<!-- "); err != nil {
-		panic(err)
+		return err
 	}
 	for k, v := range keyV {
 		if k >= len(descV) {
 			break
 		}
 		if _, err := writer.WriteString(fmt.Sprintf("%s=%s ", v, descV[k])); err != nil {
-			panic(err)
+			return err
 		}
 	}
 	if _, err := writer.WriteString("-->\n"); err != nil {
-		panic(err)
+		return err
 	}
 
 	// write data
 	if _, err := writer.WriteString("<root>\n"); err != nil {
-		panic(err)
+		return err
 	}
 	for _, v := range dataV {
 		_, err := writer.WriteString(v)
 		if err != nil {
-			panic(err)
+			return err
 		}
 	}
 	if _, err := writer.WriteString("</root>\n"); err != nil {
-		panic(err)
+		return err
 	}
+	return nil
 }
 
 func initFormat(pathTar string) {
