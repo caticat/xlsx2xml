@@ -245,6 +245,9 @@ func analyzeXlsx(pathSrc string, keyV, descV, dataV, typeV *[]string) error {
 			case XName:
 				for y, cell := range row.Cells {
 					text, _ := cell.String()
+					if text == "" {
+						continue
+					}
 					keyAllV = append(keyAllV, text)
 					if _, ok := mValid[y]; !ok {
 						continue
