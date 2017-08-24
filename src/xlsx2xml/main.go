@@ -239,6 +239,7 @@ func analyzeXlsx(pathSrc string, keyV, descV, dataV, typeV *[]string) error {
 						continue
 					}
 					text, _ := cell.String()
+					text = strings.Replace(text, "--", "", -1)
 					*descV = append(*descV, text)
 				}
 			case XUsage:

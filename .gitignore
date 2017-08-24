@@ -1,4 +1,5 @@
 data
 pkg
 *.exe
-
+debug
+.vscode
